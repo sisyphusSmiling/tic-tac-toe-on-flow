@@ -1,0 +1,34 @@
+{
+	"contracts" : {
+		"FungibleToken": {
+			"aliases": {
+				"emulator": "ee82856bf20e2aa6"
+			}
+		},
+		"FlowToken": {
+			"aliases": {
+				"emulator": "0x0ae53cb6e3f42a79"
+			}
+		},
+		"TicTacToe": "./contracts/TicTacToe.cdc"
+	},
+	"networks": {
+		"emulator": "127.0.0.1:3569",
+		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"sandboxnet": "access.sandboxnet.nodes.onflow.org:9000",
+		"testnet": "access.devnet.nodes.onflow.org:9000"
+	},
+	"accounts": {
+		"emulator-account": {
+			"address": "f8d6e0586b0a20c7",
+			"key": "2b53f8bcb31878ac8a3886eceba93275498461a9ce35101bf6e545e01b9af309"
+		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"TicTacToe"
+			]
+		}
+	}
+}
