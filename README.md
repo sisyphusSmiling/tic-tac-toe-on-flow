@@ -8,11 +8,11 @@ The tension here is created by the fact that a) we want immortally composable ga
 
 So what to do?
 
-In TicTacToe, the experimental solution is to introduce neutral ground by creating a new account entirely, and dedicating this account to facilitate gameplay between two players - a "channel", if you will. Access to that neutral account is encapsulates in a contract-defined resource both players have access to, enabling creation and storage of new boards in a trustless manner. Either player can fund account storage, and players are guaranteed funds go only toward funding storage of their games.
+In TicTacToe, the experimental solution is to introduce neutral ground by creating a new account entirely, and dedicating this account to facilitate gameplay between two players - a "channel", if you will. Access to that neutral account is encapsulated in a contract-defined resource both players have access to, enabling creation and storage of new boards in a trustless manner. Either player can fund account storage, and players are guaranteed funds go only toward funding storage of their games and no one else's.
 
-This approach removes the dependency on contract account storage, aligning incentives for storage use - those that benefit from the storage of relevant resources are burdened with funding it.
+This approach removes the dependency on contract account storage, aligning incentives for storage use - those that benefit from the storage of relevant resources are tasked with funding it.
 
-These "server" or "channel" accounts showcase how AuthAccount Capabilities can be leveraged to ecapsulate and programmatically utilize account access outside of the context of HybridCustody.
+These "server" or "channel" accounts showcase how AuthAccount Capabilities can be leveraged to ecapsulate and programmatically utilize account access in use cases more general than HybridCustody.
 
 ## Flow CLI Walkthrough
 
