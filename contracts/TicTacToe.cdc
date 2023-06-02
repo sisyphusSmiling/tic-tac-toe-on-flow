@@ -36,13 +36,14 @@ access(all) contract TicTacToe {
     access(all) let HandleStoragePath: StoragePath
     access(all) let PlayerReceiverPublicPath: PublicPath
 
-    /* TODO: Events */
+    /* Events */
     //
-    access(all) event ChannelCreated(id: UInt64, players: [Address]) // X
-    access(all) event BoardCreated(id: UInt64) // X
-    access(all) event HandleCreated(id: UInt64, name: String) // X
-    access(all) event HandleNameUpdated(id: UInt64, oldName: String, newName: String) // X
-    access(all) event BoardAddedToChannel(boardID: UInt64, channelID: UInt64, xPlayerAddress: Address, oPlayerAddress: Address) // X
+    access(all) event MinimumFundingAmountUpdated(newAmount: UFix64)
+    access(all) event ChannelCreated(id: UInt64, players: [Address])
+    access(all) event BoardCreated(id: UInt64)
+    access(all) event HandleCreated(id: UInt64, name: String)
+    access(all) event HandleNameUpdated(id: UInt64, oldName: String, newName: String)
+    access(all) event BoardAddedToChannel(boardID: UInt64, channelID: UInt64, xPlayerAddress: Address, oPlayerAddress: Address)
     access(all) event MoveSubmitted(move: Bool, boardID: UInt64, boardState: [[Bool?]])
     access(all) event GameOver(winner: Bool?, boardID: UInt64)
 
@@ -353,7 +354,7 @@ access(all) contract TicTacToe {
 
         // Create a new account, depositing any surplus balance
         let neutralAccount = AuthAccount(payer: self.account)
-        if fundingBalance > 0 {
+        if fundingBalance > 0.0 {
             neutralAccount.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!.deposit(
                 from: <-vaultRef.withdraw(amount: fundingBalance)
             )
@@ -381,6 +382,16 @@ access(all) contract TicTacToe {
         channelReceiver2.addChannelParticipantCapability(channelParticipantCap)
     }
 
+    /* Admin */
+    //
+    /// Enables update on minimumFundingAmount
+    pub resource Admin {
+        pub fun setMinimumFundingAmount(_ new: UFix64) {
+            TicTacToe.minimumFundingAmount = new
+            emit MinimumFundingAmountUpdated(newAmount: new)
+        }
+    }
+
     /* Public creation methods */
     //
     /// Returns a new Board resource
@@ -395,7 +406,7 @@ access(all) contract TicTacToe {
     ///
     access(all) fun createNewHandle(name: String): @Handle {
         let handle <-create Handle(name: name)
-        emit HandleCreated(id: handle.id, name: name)
+        emit HandleCreated(id: handle.getID(), name: name)
         return <- handle
     }
 
@@ -416,6 +427,8 @@ access(all) contract TicTacToe {
         return nil
     }
 
+    /// Checks for winning row, returning the matching Bool or nil if not found
+    ///
     access(self) fun checkRows(_ board: [[Bool?]]): Bool? {
         for r in board {
             if r[0] != nil && (r[0] == r[1] && r[1] == r[2]) {
@@ -425,6 +438,8 @@ access(all) contract TicTacToe {
         return nil
     }
 
+    /// Checks for winning column, returning the matching Bool or nil if not found
+    ///
     access(self) fun checkColumns(_ board: [[Bool?]]): Bool? {
         var col = 0
         while col < board.length {
@@ -436,8 +451,11 @@ access(all) contract TicTacToe {
         return nil
     }
 
+    /// Checks for winning diagonal, returning the matching Bool or nil if not found
+    ///
     access(self) fun checkDiagonal(_ board: [[Bool?]]): Bool? {
-        if board[0][0] != nil && (board[0][0] == board[1][1] && board[1][1] == board[2][2]) {
+        if board[0][0] != nil && (board[0][0] == board[1][1] && board[1][1] == board[2][2]) ||
+           board[0][2] != nil && (board[0][2] == board[1][1] && board[1][1] == board[2][0]) {
             return board[0][0]
         }
         return nil
