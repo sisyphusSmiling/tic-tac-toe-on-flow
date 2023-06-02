@@ -32,26 +32,26 @@ These "server" or "channel" accounts showcase how AuthAccount Capabilities can b
     ```sh
     flow accounts create # account name: player2
     ```
-1. TODO: Configure `Handle` resources in player accounts
+1.  Configure `Handle` resources in player accounts
     ```sh
-    flow transactions send transactions/tic_tac_toe/setup_handle.cdc --signer player1
+    flow transactions send transactions/setup_handle.cdc --signer player1
     ```
     ```sh
-    flow transactions send transactions/tic_tac_toe/setup_handle.cdc --signer player2
+    flow transactions send transactions/setup_handle.cdc --signer player2
     ```
-1. TODO: Mint $FLOW to `player1` so it can fund the channel
+1. Transfer $FLOW to `player1` so it can fund the channel
     ```sh
-    # TODO
+    flow transactions send transactions/transfer_flow.cdc e03daebed8ca0615 10.0
     ```
-1. TODO: Setup a channel between `player1` and `player2`
+1. Setup a channel between `player1` and `player2` which also creates a new board in said `Channel` account
     ```sh
-    flow transactions send transactions/tic_tac_toe/setup_channel.cdc <PLAYER_TWO_ADDRESS> <FUNDING_AMOUNT> --signer player1
+    flow transactions send transactions/create_channel_with_player.cdc <PLAYER_TWO_ADDRESS> <FUNDING_AMOUNT> --signer player1
     ```
-1. TODO: Setup a new `Board` to play in the channel between both players
+1. Setup a new `Board` to play in the channel between both players
     ```sh
-    flow transactions send transactions/tic_tac_toe/start_new_game.cdc <PLAYER_ONE_ADDRESS> --signer player2
+    flow transactions send transactions/start_new_board_with_player.cdc <PLAYER_TWO_ADDRESS> --signer player1
     ```
-1. TODO: Submit moves and continue gameplay (repeat until game is over)
+1. Submit moves and continue gameplay (repeat until game is over)
     ```sh
-    flow transactions send transactions/tic_tac_toe/submit_move.cdc <BOARD_ID> <ROW> <COLUMN> --signer <ACCOUNT_NAME>
+    flow transactions send transactions/submit_move_by_board_id.cdc <BOARD_ID> <ROW> <COLUMN> --signer <ACCOUNT_NAME>
     ```

@@ -35,7 +35,8 @@ access(all) contract TicTacToe {
     access(all) let ChannelParticipantsPrivatePath: PrivatePath
     access(all) let HandleStoragePath: StoragePath
     access(all) let PlayerReceiverPublicPath: PublicPath
-
+    access(all) let ChannelReceiverPublicPath: PublicPath
+P
     /* Events */
     //
     access(all) event MinimumFundingAmountUpdated(newAmount: UFix64)
@@ -109,9 +110,9 @@ access(all) contract TicTacToe {
         ///
         access(self) fun submitMove(move: Bool, row: Int, column: Int) {
             pre {
+                self.inPlay: "Board is no longer in play"
                 self.nextMove == move: "This move is not allowed for this round"
                 self.board[row][column] == nil: "The cell has already been marked"
-                self.inPlay: "Board is no longer in play"
             }
             // Update move trackers
             self.moveCounter = self.moveCounter + 1
@@ -192,7 +193,7 @@ access(all) contract TicTacToe {
 
         init(name: String) {
             pre {
-                name.length >= 32: "Name must be less than 32 characters"
+                name.length <= 32: "Name must be less than 32 characters"
             }
             self.name = name
             self.xPlayerCaps = {}
@@ -211,7 +212,7 @@ access(all) contract TicTacToe {
 
         access(all) fun setName(_ new: String) {
             pre {
-                new.length >= 32: "Name must be less than 32 characters"
+                new.length <= 32: "Name must be less than 32 characters"
             }
             let old = self.name
             self.name = new
@@ -236,11 +237,12 @@ access(all) contract TicTacToe {
             self.oPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
         }
 
-        access(all) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
-            pre {
-                cap.check(): "Invalid Capability"
-                self.channelParticipantCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Channel"
-            }
+        access(all) fun borrowXPlayer(id: UInt64): &{XPlayer}? {
+            return self.xPlayerCaps[id]?.borrow() ?? nil
+        }
+
+        access(all) fun borrowOPlayer(id: UInt64): &{OPlayer}? {
+            return self.oPlayerCaps[id]?.borrow() ?? nil
         }
 
         access(all) fun removeXPlayerCapability(id: UInt64): Bool {
@@ -251,12 +253,36 @@ access(all) contract TicTacToe {
             return self.oPlayerCaps.remove(key: id) != nil
         }
 
+        access(all) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
+            pre {
+                cap.check(): "Invalid Capability"
+                self.channelParticipantCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Channel"
+                cap.borrow()!.getChannelParticipantAddresses().contains(self.owner!.address):
+                    "Cannot add a ChannelParticipant Capability for a Channel this account is not a participant of"
+            }
+            let channelRef = cap.borrow()!
+            self.channelParticipantCaps.insert(key: channelRef.getID(), cap)
+            
+            let participants = channelRef.getChannelParticipantAddresses()
+            let other = participants[0] != self.owner!.address ? participants[0] : participants[1]
+            self.channelAddressesToIDs.insert(key: other, channelRef.getID())
+        }
+
+        access(all) fun borrowChannelParticpantByAddress(_ address: Address): &{ChannelParticipant}? {
+            if let channelID = self.channelAddressesToIDs[address] {
+                if let channelCap = self.channelParticipantCaps[channelID] {
+                    return channelCap.borrow() ?? panic("Problem with ChannelParticipant Capability")
+                }
+            }
+            return nil
+        }
+
         access(all) fun removeChannelParticipantCapability(id: UInt64): Bool {
             return self.oPlayerCaps.remove(key: id) != nil
         }
 
-        access(all) fun borrowChannelParticpantByAddress(_ address: Address): &{ChannelParticipant} {
-            return self.channelParticipantCaps[self.channelAddressesToIDs[address]!]!.borrow()!
+        access(all) fun getChannelAddresses(): [Address] {
+            return self.channelAddressesToIDs.keys
         }
 
         access(all) fun toString(): String {
@@ -270,6 +296,7 @@ access(all) contract TicTacToe {
     ///
     access(all) resource interface ChannelParticipant {
         access(all) fun getID(): UInt64
+        access(all) fun getChannelParticipantAddresses(): [Address]
         access(all) fun startNewBoard()
         access(all) fun fundChannel(vault: @FungibleToken.Vault)
     }
@@ -296,11 +323,15 @@ access(all) contract TicTacToe {
             return self.uuid
         }
 
+        access(all) fun getChannelParticipantAddresses(): [Address] {
+            return [self.playerCaps.values[0]!.address, self.playerCaps.values[1]!.address]
+        }
+
         /// Creates a new Board, saving in the Channel account, linking and issuing player Capabilities, assigning
         /// X and O (pseudo) randomly
         access(all) fun startNewBoard() {
             let account = self.accountCap.borrow() ?? panic("Problem with AuthAccount Capability")
-            let board <-create Board()
+            let board <-TicTacToe.createEmptyBoard()
             let boardID = board.getID()
             
             account.save(<-board, to: TicTacToe.BoardStoragePath)
@@ -415,7 +446,7 @@ access(all) contract TicTacToe {
     
     /// Returns a new Handle resource
     ///
-    access(all) fun createNewHandle(name: String): @Handle {
+    access(all) fun createHandle(name: String): @Handle {
         let handle <-create Handle(name: name)
         emit HandleCreated(id: handle.getID(), name: name)
         return <- handle
@@ -481,6 +512,7 @@ access(all) contract TicTacToe {
         self.OPlayerPrivatePath = /private/TicTacToeOPlayer
         self.HandleStoragePath = /storage/TicTacToeHandle
         self.PlayerReceiverPublicPath = /public/TicTacToePlayerReceiver
+        self.ChannelReceiverPublicPath = /public/TicTacToeChannelReceiver
         self.ChannelStoragePath = /storage/TicTacToeChannel
         self.ChannelAccountPath = /private/ChannelAccountCapability
         self.ChannelParticipantsPrivatePath = /private/TicTacToeChannelParticipant
