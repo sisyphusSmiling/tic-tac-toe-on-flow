@@ -20,6 +20,14 @@ import "FlowToken"
 /// The result is a player-funded, trustlessly peer-to-peer gaming solution defined in a contract that can exist as an
 /// immortal public good.
 ///
+/* TODO:
+    - [ ] Deal with StoragePath collissions in Channel.startNewBoard() - use prefix and suffix on board ID
+    - [ ] Enable board id to channel attribution - need to know which board is for which channel
+    - [ ] Problem: Given a Handle, how do I know which boards are currently inPlay and which are currently waiting for my turn?
+          This can also be solved by a script if necessary
+        - [ ] Look up currently inPlay boards from Handle
+        - [ ] Of those inPlay, which are currently waiting for my turn?
+ */
 access(all) contract TicTacToe {
 
     access(all) var minimumFundingAmount: UFix64
@@ -333,7 +341,7 @@ P
             let account = self.accountCap.borrow() ?? panic("Problem with AuthAccount Capability")
             let board <-TicTacToe.createEmptyBoard()
             let boardID = board.getID()
-            
+            // TODO: StoragePath collisions
             account.save(<-board, to: TicTacToe.BoardStoragePath)
             account.link<&{XPlayer}>(TicTacToe.XPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
             account.link<&{OPlayer}>(TicTacToe.OPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
