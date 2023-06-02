@@ -21,7 +21,6 @@ import "FlowToken"
 /// immortal public good.
 ///
 /* TODO:
-    - [ ] Deal with StoragePath collissions in Channel.startNewBoard() - use prefix and suffix on board ID
     - [ ] Enable board id to channel attribution - need to know which board is for which channel
     - [ ] Problem: Given a Handle, how do I know which boards are currently inPlay and which are currently waiting for my turn?
           This can also be solved by a script if necessary
@@ -34,10 +33,10 @@ access(all) contract TicTacToe {
 
     /* Common Paths */
     //
+    access(all) let boardPathPrefix: String
+    access(all) let xPlayerPathPrefix: String
+    access(all) let oPlayerPathPrefix: String
     access(all) let AdminStoragePath: StoragePath
-    access(all) let BoardStoragePath: StoragePath
-    access(all) let XPlayerPrivatePath: PrivatePath
-    access(all) let OPlayerPrivatePath: PrivatePath
     access(all) let ChannelStoragePath: StoragePath
     access(all) let ChannelAccountPath: PrivatePath
     access(all) let ChannelParticipantsPrivatePath: PrivatePath
@@ -173,8 +172,8 @@ P
     access(all) resource interface PlayerReceiver {
         access(all) fun getID(): UInt64
         access(all) fun getName(): String
-        access(all) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>)
-        access(all) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>)
+        access(contract) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>)
+        access(contract) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>)
         access(all) fun toString(): String
     }
 
@@ -183,7 +182,7 @@ P
     access(all) resource interface ChannelReceiver {
         access(all) fun getID(): UInt64
         access(all) fun getName(): String
-        access(all) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>)
+        access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>)
         access(all) fun toString(): String
     }
 
@@ -227,7 +226,7 @@ P
             emit HandleNameUpdated(id: self.getID(), oldName: old, newName: new)
         }
 
-        access(all) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>) {
+        access(contract) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>) {
             pre {
                 cap.check(): "Invalid Capability"
                 self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
@@ -236,7 +235,7 @@ P
             self.xPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
         }
 
-        access(all) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>) {
+        access(contract) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>) {
             pre {
                 cap.check(): "Invalid Capability"
                 self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
@@ -261,7 +260,7 @@ P
             return self.oPlayerCaps.remove(key: id) != nil
         }
 
-        access(all) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
+        access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
             pre {
                 cap.check(): "Invalid Capability"
                 self.channelParticipantCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Channel"
@@ -341,13 +340,17 @@ P
             let account = self.accountCap.borrow() ?? panic("Problem with AuthAccount Capability")
             let board <-TicTacToe.createEmptyBoard()
             let boardID = board.getID()
-            // TODO: StoragePath collisions
-            account.save(<-board, to: TicTacToe.BoardStoragePath)
-            account.link<&{XPlayer}>(TicTacToe.XPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
-            account.link<&{OPlayer}>(TicTacToe.OPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
 
-            let xCap = account.getCapability<&{XPlayer}>(TicTacToe.XPlayerPrivatePath)
-            let oCap = account.getCapability<&{OPlayer}>(TicTacToe.OPlayerPrivatePath)
+            let boardStoragePath = StoragePath(identifier: TicTacToe.boardPathPrefix.concat(boardID.toString()))!
+            let xPrivatePath = PrivatePath(identifier: TicTacToe.xPlayerPathPrefix.concat(boardID.toString()))!
+            let oPrivatePath = PrivatePath(identifier: TicTacToe.oPlayerPathPrefix.concat(boardID.toString()))!
+
+            account.save(<-board, to: boardStoragePath)
+            account.link<&{XPlayer}>(xPrivatePath, target: boardStoragePath)
+            account.link<&{OPlayer}>(oPrivatePath, target: boardStoragePath)
+
+            let xCap = account.getCapability<&{XPlayer}>(xPrivatePath)
+            let oCap = account.getCapability<&{OPlayer}>(oPrivatePath)
 
             let coinFlip = unsafeRandom() % 2
             let xPlayerID = self.playerCaps.keys[coinFlip]
@@ -514,10 +517,11 @@ P
     init() {
         self.minimumFundingAmount = 1.0
 
+        self.boardPathPrefix = "TicTacToeBoard_"
+        self.xPlayerPathPrefix = "TicTacToeXPlayer_"
+        self.oPlayerPathPrefix = "TicTacToeOPlayer_"
+
         self.AdminStoragePath = /storage/TicTacToeAdmin
-        self.BoardStoragePath = /storage/TicTacToeBoard
-        self.XPlayerPrivatePath = /private/TicTacToeXPlayer
-        self.OPlayerPrivatePath = /private/TicTacToeOPlayer
         self.HandleStoragePath = /storage/TicTacToeHandle
         self.PlayerReceiverPublicPath = /public/TicTacToePlayerReceiver
         self.ChannelReceiverPublicPath = /public/TicTacToeChannelReceiver
