@@ -39,7 +39,8 @@ access(all) contract TicTacToe {
     /* Events */
     //
     access(all) event MinimumFundingAmountUpdated(newAmount: UFix64)
-    access(all) event ChannelCreated(id: UInt64, players: [Address])
+    access(all) event ChannelCreated(id: UInt64, address: Address, players: [Address])
+    access(all) event ChannelFunded(id: UInt64, address: Address, amount: UFix64)
     access(all) event BoardCreated(id: UInt64)
     access(all) event HandleCreated(id: UInt64, name: String)
     access(all) event HandleNameUpdated(id: UInt64, oldName: String, newName: String)
@@ -270,6 +271,7 @@ access(all) contract TicTacToe {
     access(all) resource interface ChannelParticipant {
         access(all) fun getID(): UInt64
         access(all) fun startNewBoard()
+        access(all) fun fundChannel(vault: @FungibleToken.Vault)
     }
 
     /// Channels can be thought of as a Web3 notion of a "game server" where players engage in play on neutral grounds,
@@ -322,6 +324,15 @@ access(all) contract TicTacToe {
 
             emit BoardAddedToChannel(boardID: boardID, channelID: self.getID(), xPlayerAddress: xPlayerCap.address, oPlayerAddress: oPlayerCap.address)
         }
+
+        /// Allows participants to fund this Channel's account
+        access(all) fun fundChannel(vault: @FungibleToken.Vault) {
+            emit ChannelFunded(id: self.getID(), address: self.owner!.address, amount: vault.balance)
+            let accountRef: &AuthAccount = self.accountCap.borrow()!
+            accountRef.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!.deposit(
+                from: <-vault
+            )
+        }
     }
 
     /// Creates a new account, saving and linking a new Channel which encapsulates the given Capabilities. Two 
@@ -354,11 +365,7 @@ access(all) contract TicTacToe {
 
         // Create a new account, depositing any surplus balance
         let neutralAccount = AuthAccount(payer: self.account)
-        if fundingBalance > 0.0 {
-            neutralAccount.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!.deposit(
-                from: <-vaultRef.withdraw(amount: fundingBalance)
-            )
-        }
+        
 
         // Link an AuthAccount Capability and create a Channel
         let accountCap = neutralAccount.linkAccount(self.ChannelAccountPath)!
@@ -367,8 +374,12 @@ access(all) contract TicTacToe {
                 player1: playerReceiver1,
                 player2: playerReceiver2
             )
-        emit ChannelCreated(id: channel.getID(), players: [playerReceiver1.address, playerReceiver2.address])
-
+        emit ChannelCreated(id: channel.getID(), address: neutralAccount.address, players: [playerReceiver1.address, playerReceiver2.address])
+        if fundingBalance > 0.0 {
+            channel.fundChannel(
+                vault: <-vaultRef.withdraw(amount: fundingBalance)
+            )
+        }
         // Save and link the Channel
         neutralAccount.save(
             <-channel,
@@ -472,7 +483,7 @@ access(all) contract TicTacToe {
         self.PlayerReceiverPublicPath = /public/TicTacToePlayerReceiver
         self.ChannelStoragePath = /storage/TicTacToeChannel
         self.ChannelAccountPath = /private/ChannelAccountCapability
-        self.ChannelParticipantsPrivatePath = /private/TicTacToeChannel
+        self.ChannelParticipantsPrivatePath = /private/TicTacToeChannelParticipant
 
         self.account.save(<-create Admin(), to: self.AdminStoragePath)
     }
