@@ -38,11 +38,11 @@ access(all) contract TicTacToe {
 
     /* TODO: Events */
     //
-    access(all) event ChannelCreated(id: UInt64, players: [Address])
-    access(all) event BoardCreated(id: UInt64)
-    access(all) event HandleCreated(id: UInt64, name: String)
-    access(all) event HandleUpdated(id: UInt64, oldName: String, newName: String)
-    access(all) event BoardAddedToChannel(boardID: UInt64, channelID: UInt64, xPlayer: Address, oPlayer: Address)
+    access(all) event ChannelCreated(id: UInt64, players: [Address]) // X
+    access(all) event BoardCreated(id: UInt64) // X
+    access(all) event HandleCreated(id: UInt64, name: String) // X
+    access(all) event HandleNameUpdated(id: UInt64, oldName: String, newName: String) // X
+    access(all) event BoardAddedToChannel(boardID: UInt64, channelID: UInt64, xPlayerAddress: Address, oPlayerAddress: Address) // X
     access(all) event MoveSubmitted(move: Bool, boardID: UInt64, boardState: [[Bool?]])
     access(all) event GameOver(winner: Bool?, boardID: UInt64)
 
@@ -51,14 +51,14 @@ access(all) contract TicTacToe {
     /// Interface representing player submitting X
     ///
     access(all) resource interface XPlayer {
-        access(all) fun getBoardID(): UInt64
+        access(all) fun getID(): UInt64
         access(all) fun markX(row: Int, column: Int)
     }
 
     /// Interface representing player submitting O
     ///
     access(all) resource interface OPlayer {
-        access(all) fun getBoardID(): UInt64
+        access(all) fun getID(): UInt64
         access(all) fun markO(row: Int, column: Int)
     }
     
@@ -87,7 +87,7 @@ access(all) contract TicTacToe {
 
         /// Getter for ID
         ///
-        access(all) fun getBoardID(): UInt64 {
+        access(all) fun getID(): UInt64 {
             return self.id
         }
 
@@ -116,12 +116,17 @@ access(all) contract TicTacToe {
             self.nextMove = !move
 
             self.board[row][column] = move
+
+            emit MoveSubmitted(move: move, boardID: self.getID(), boardState: self.getBoard())
             
             if let winner = TicTacToe.getWinner(self.board) {
                 self.winner = winner
             }
             if self.moveCounter == 9 || self.winner != nil {
                 self.inPlay = false
+            }
+            if !self.inPlay {
+                emit GameOver(winner: self.getWinner(), boardID: self.getID())
             }
         }
 
@@ -208,24 +213,25 @@ access(all) contract TicTacToe {
             }
             let old = self.name
             self.name = new
+            emit HandleNameUpdated(id: self.getID(), oldName: old, newName: new)
         }
 
         access(all) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>) {
             pre {
                 cap.check(): "Invalid Capability"
-                self.xPlayerCaps[cap.borrow()!.getBoardID()] == nil: "Already have Capability for this Board"
-                self.oPlayerCaps[cap.borrow()!.getBoardID()] == nil: "Already playing X for this Board"
+                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
+                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing X for this Board"
             }
-            self.xPlayerCaps.insert(key: cap.borrow()!.getBoardID(), cap)
+            self.xPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
         }
 
         access(all) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>) {
             pre {
                 cap.check(): "Invalid Capability"
-                self.oPlayerCaps[cap.borrow()!.getBoardID()] == nil: "Already have Capability for this Board"
-                self.xPlayerCaps[cap.borrow()!.getBoardID()] == nil: "Already playing O for this Board"
+                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
+                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing O for this Board"
             }
-            self.oPlayerCaps.insert(key: cap.borrow()!.getBoardID(), cap)
+            self.oPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
         }
 
         access(all) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
@@ -287,9 +293,14 @@ access(all) contract TicTacToe {
             return self.uuid
         }
 
+        /// Creates a new Board, saving in the Channel account, linking and issuing player Capabilities, assigning
+        /// X and O (pseudo) randomly
         access(all) fun startNewBoard() {
             let account = self.accountCap.borrow() ?? panic("Problem with AuthAccount Capability")
-            account.save(<-create Board(), to: TicTacToe.BoardStoragePath)
+            let board <-create Board()
+            let boardID = board.getID()
+            
+            account.save(<-board, to: TicTacToe.BoardStoragePath)
             account.link<&{XPlayer}>(TicTacToe.XPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
             account.link<&{OPlayer}>(TicTacToe.OPlayerPrivatePath, target: TicTacToe.BoardStoragePath)
 
@@ -300,13 +311,22 @@ access(all) contract TicTacToe {
             let xPlayerID = self.playerCaps.keys[coinFlip]
             let oPlayerID = self.playerCaps.keys[(coinFlip + 1) % 2]
 
-            self.playerCaps[xPlayerID]!.borrow()?.addXPlayerCapability(xCap)
-                ?? panic("Problem with PlayerReceiver Capability for ID: ".concat(xPlayerID.toString()))
-            self.playerCaps[oPlayerID]!.borrow()?.addOPlayerCapability(oCap)
-                ?? panic("Problem with PlayerReceiver Capability for ID: ".concat(oPlayerID.toString()))
+            let xPlayerCap = self.playerCaps[xPlayerID]!
+            let oPlayerCap = self.playerCaps[oPlayerID]!
+
+            xPlayerCap.borrow()?.addXPlayerCapability(xCap)
+                ?? panic("Problem with PlayerReceiver Capability for player with Address: ".concat(xPlayerCap.address.toString()))
+            oPlayerCap.borrow()?.addOPlayerCapability(oCap)
+                ?? panic("Problem with PlayerReceiver Capability for player with Address: ".concat(oPlayerCap.address.toString()))
+
+            emit BoardAddedToChannel(boardID: boardID, channelID: self.getID(), xPlayerAddress: xPlayerCap.address, oPlayerAddress: oPlayerCap.address)
         }
     }
 
+    /// Creates a new account, saving and linking a new Channel which encapsulates the given Capabilities. Two 
+    /// Capabilities on the Channel are given to the provided ChannelReceivers. The fundingVault is required to fund
+    /// the new account's creation.
+    ///
     access(all) fun createChannel(
         playerReceiver1: Capability<&{PlayerReceiver}>,
         playerReceiver2: Capability<&{PlayerReceiver}>,
@@ -315,7 +335,7 @@ access(all) contract TicTacToe {
         fundingVault: @FungibleToken.Vault
     )  {
         pre {
-            fundingVault.balance == self.minimumFundingAmount: "Minimum funding amount not met"
+            fundingVault.balance >= self.minimumFundingAmount: "Minimum funding amount not met"
             playerReceiver1.check(): "Invalid playerReceiver1 Capability"
             playerReceiver2.check(): "Invalid playerReceiver2 Capability"
             playerReceiver1.borrow()!.getID() != playerReceiver2.borrow()!.getID() &&
@@ -326,27 +346,36 @@ access(all) contract TicTacToe {
             playerReceiver2.borrow()!.getID() == channelReceiver2.getID():
                 "playerReceiver2 and channelReceiver2 must resolve to same Handle!"
         }
-
+        // Take receipt of the funding Vault, noting its balance
         let vaultRef = self.account.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!
-        let fundingBalance = fundingVault.balance
+        let fundingBalance = fundingVault.balance - self.minimumFundingAmount
         vaultRef.deposit(from: <-fundingVault)
 
+        // Create a new account, depositing any surplus balance
         let neutralAccount = AuthAccount(payer: self.account)
-        neutralAccount.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!.deposit(
-            from: <-vaultRef.withdraw(amount: fundingBalance)
-        )
+        if fundingBalance > 0 {
+            neutralAccount.borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!.deposit(
+                from: <-vaultRef.withdraw(amount: fundingBalance)
+            )
+        }
 
+        // Link an AuthAccount Capability and create a Channel
         let accountCap = neutralAccount.linkAccount(self.ChannelAccountPath)!
-        neutralAccount.save(
-            <-create Channel(
+        let channel<-create Channel(
                 accountCap: accountCap,
                 player1: playerReceiver1,
                 player2: playerReceiver2
-            ),
+            )
+        emit ChannelCreated(id: channel.getID(), players: [playerReceiver1.address, playerReceiver2.address])
+
+        // Save and link the Channel
+        neutralAccount.save(
+            <-channel,
             to: self.ChannelStoragePath
         )
         neutralAccount.link<&{ChannelParticipant}>(self.ChannelParticipantsPrivatePath, target: self.ChannelStoragePath)
-
+        
+        // Give each player a ChannelParticipant Capability 
         let channelParticipantCap = neutralAccount.getCapability<&{ChannelParticipant}>(self.ChannelParticipantsPrivatePath)
         channelReceiver1.addChannelParticipantCapability(channelParticipantCap)
         channelReceiver2.addChannelParticipantCapability(channelParticipantCap)
@@ -357,13 +386,17 @@ access(all) contract TicTacToe {
     /// Returns a new Board resource
     ///
     access(all) fun createEmptyBoard(): @Board {
-        return <-create Board()
+        let board <-create Board()
+        emit BoardCreated(id: board.getID())
+        return <- board
     }
     
     /// Returns a new Handle resource
     ///
     access(all) fun createNewHandle(name: String): @Handle {
-        return <-create Handle(name: name)
+        let handle <-create Handle(name: name)
+        emit HandleCreated(id: handle.id, name: name)
+        return <- handle
     }
 
     /* Resolution logic */
