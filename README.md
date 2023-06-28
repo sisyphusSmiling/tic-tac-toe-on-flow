@@ -1,5 +1,12 @@
 # ❌ Onchain TicTacToe ⭕
 
+<!-- 
+- Not clear why channels are necessary
+- Needs warning on use of AuthAccount Caps
+- Needs explanation of why we made this design choice
+- Could this have been done without account caps?
+-->
+
 This TicTacToe contract was created to explore Web3-native notions of neutral ground gaming servers commonly found in traditional gaming environments.
 
 One of the fundamental problems in creating trustless onchain multiplayer games is preserving neutrality in a manner that is scalable and resilient to DDOS attacks on the contract account. If two players must to act on game state, where do we store that game state such that neither player has the ability to interfere with the other's gameplay **and** doesn't rely on contract managed storage or funding?
@@ -13,6 +20,10 @@ In TicTacToe, the experimental solution is to introduce neutral ground by creati
 This approach removes the dependency on contract account storage, aligning incentives for storage use - those that benefit from the storage of relevant resources are tasked with funding it.
 
 These "server" or "channel" accounts showcase how AuthAccount Capabilities can be leveraged to ecapsulate and programmatically utilize account access in use cases more general than HybridCustody.
+
+![tic tac toe overview diagram](./diagrams/overview.png)
+
+Each player's access to the game is mediated through a `Handle` which manages Capabilities on both `Channel` and `Board` resources. Whenever a player wants to engage in play with another, they open a new `Channel` which is saved in an encapsulated account. From there, they can instantiate new `Board`s which randomly assign X or O to either player participating in the `Channel`. Gameplay can then occur agains that board according to the well-known rules of Tic-Tac-Toe, continuing until either player wins or all cells are filled.
 
 ## Flow CLI Walkthrough
 

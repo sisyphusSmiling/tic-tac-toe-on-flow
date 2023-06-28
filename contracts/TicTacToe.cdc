@@ -26,6 +26,10 @@ import "FlowToken"
           This can also be solved by a script if necessary
         - [ ] Look up currently inPlay boards from Handle
         - [ ] Of those inPlay, which are currently waiting for my turn?
+    - [ ] Enable withdrawal of funds from Channel account
+        - [ ] Track deposits to the Channel by player
+    - [ ] Clean up storage in Channel account
+        - [ ] Board deletion patterns - multi-auth? What pre-conditions must be met?
  */
 access(all) contract TicTacToe {
 
@@ -191,6 +195,7 @@ P
     ///
     access(all) resource Handle : PlayerReceiver, ChannelReceiver{
         access(self) var name: String
+        // TODO: Consider namespacing on channeAddress.boardID
         access(self) let xPlayerCaps: {UInt64: Capability<&{XPlayer}>}
         access(self) let oPlayerCaps: {UInt64: Capability<&{OPlayer}>}
         
@@ -514,6 +519,10 @@ P
         return nil
     }
 
+    access(account) fun createAdmin(): @Admin {
+        return <- create Admin()
+    }
+
     init() {
         self.minimumFundingAmount = 1.0
 
@@ -528,7 +537,5 @@ P
         self.ChannelStoragePath = /storage/TicTacToeChannel
         self.ChannelAccountPath = /private/ChannelAccountCapability
         self.ChannelParticipantsPrivatePath = /private/TicTacToeChannelParticipant
-
-        self.account.save(<-create Admin(), to: self.AdminStoragePath)
     }
 }
