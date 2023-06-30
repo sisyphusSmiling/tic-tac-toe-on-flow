@@ -353,6 +353,12 @@ access(all) contract TicTacToe {
                 
                 self.storedBoards.remove(at: self.storedBoards.firstIndex(of: boardID)!)
                 self.pendingDeletions.remove(key: boardID)
+
+                for id in self.playerCaps.keys {
+                    if let cap = self.playerCaps[id] {
+                        cap!.borrow()?.deleteBoardCallback(channelAddress: self.owner!.address, channelID: self.getID(), boardID: boardID)
+                    }
+                }
                 
                 emit BoardDeletion(boardID: boardID, channelID: self.getID(), pending: false)
             }
@@ -399,6 +405,7 @@ access(all) contract TicTacToe {
         access(all) fun toString(): String
         access(contract) fun addXPlayerCapability(channelID: UInt64, _ cap: Capability<&{XPlayer}>)
         access(contract) fun addOPlayerCapability(channelID: UInt64, _ cap: Capability<&{OPlayer}>)
+        access(contract) fun deleteBoardCallback(channelAddress: Address, channelID: UInt64, boardID: UInt64)
     }
 
     /// Enables one to receive Channel Capabilities
@@ -407,6 +414,7 @@ access(all) contract TicTacToe {
         access(all) fun getID(): UInt64
         access(all) fun getName(): String
         access(all) fun toString(): String
+        access(all) fun getChannelIDs(): [UInt64]
         access(all) fun getChannelAddresses(): [Address]
         access(all) fun getBoardsInChannelWith(otherHandleAddress: Address): [UInt64]?
         access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>)
@@ -454,6 +462,10 @@ access(all) contract TicTacToe {
 
         access(all) fun toString(): String {
             return self.name.concat("#").concat(self.getID().toString())
+        }
+
+        access(all) fun getChannelIDs(): [UInt64] {
+            return self.channelAddressesToIDs.values
         }
 
         access(all) fun getChannelAddresses(): [Address] {
@@ -550,15 +562,34 @@ access(all) contract TicTacToe {
             return nil
         }
 
-        access(all) fun leaveChannel(id: UInt64): Bool {
-            if !self.channelParticipantCaps.containsKey(id) {
-                return false
-            }
-            if let channelRef = self.channelParticipantCaps.remove(key: id)!.borrow() {
+        /// Removes Channel related data & Capabilities from this Handle and removes the PlayerReceiver Capability from
+        /// the specified Channel
+        access(all) fun leaveChannel(withAddress: Address): Bool {
+            if let id = self.channelAddressesToIDs.remove(key: withAddress) {
+                let channelRef = self.channelParticipantCaps.remove(key: id)!.borrow()!
+                let boardIDs = self.channelToBoardIDs.remove(key: id)!
+
+                for boardID in boardIDs {
+                    self.xPlayerCaps.remove(key: boardID)
+                    self.oPlayerCaps.remove(key: boardID)
+                }
+
                 channelRef.removePlayerCallback(self.getID())
+                
                 emit PlayerLeftChannel(channelID: id, playerID: self.getID(), playerAddress: self.owner!.address)
+                
+                return true
             }
-            return true
+            return false
+        }
+        
+        /// Enables cleanup of Board IDs and player capabilities when a Board is deleted.
+        ///
+        access(contract) fun deleteBoardCallback(channelAddress: Address, channelID: UInt64, boardID: UInt64) {
+            let boardIndex = self.channelToBoardIDs[channelID]!.firstIndex(of: boardID)!
+            self.channelToBoardIDs[channelID]?.remove(at: boardIndex)
+            self.xPlayerCaps.remove(key: boardID)
+            self.oPlayerCaps.remove(key: boardID)
         }
     }
 
