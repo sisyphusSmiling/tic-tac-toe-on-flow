@@ -26,12 +26,12 @@ import "FlowToken"
           This can also be solved by a script if necessary
         - [ ] Look up currently inPlay boards from Handle
         - [ ] Of those inPlay, which are currently waiting for my turn?
-    - [ ] Enable withdrawal of funds from Channel account
-        - [ ] Track deposits to the Channel by player
-    - [ ] Clean up storage in Channel account
-        - [ ] Board deletion patterns - multi-auth? What pre-conditions must be met?
+    - [X] Clean up storage in Channel account
+        - [X] Board deletion patterns - two-stage both pending-accepted scheme
     - [ ] TODO - Decide on whether to allow public creation of Boards | Alt is close Board creation to Channel only
         - [ ] PlayerReceiver is public which creates a spam vector with free & public board creation
+    - [ ] Deprioritized - Enable withdrawal of funds from Channel account
+        - [ ] Track deposits to the Channel by player
  */
 access(all) contract TicTacToe {
 
@@ -78,6 +78,8 @@ access(all) contract TicTacToe {
     // Board & Players 
     // ------------------------------
     //
+    /// Queryable public Board interface
+    ///
     access(all) resource interface BoardSpectator {
         access(all) fun getID(): UInt64
         access(all) fun getNextMove(): Bool?
@@ -206,6 +208,8 @@ access(all) contract TicTacToe {
     // Channel
     // ------------------------------
     //
+    /// Queryable public Channel interface
+    ///
     access(all) resource interface ChannelSpectator {
         access(all) fun getID(): UInt64
         access(all) fun getChannelParticipantAddresses(): [Address?]
@@ -309,9 +313,9 @@ access(all) contract TicTacToe {
             let xPlayerCap = self.playerCaps[xPlayerID]!
             let oPlayerCap = self.playerCaps[oPlayerID]!
 
-            xPlayerCap!.borrow()?.addXPlayerCapability(xCap)
+            xPlayerCap!.borrow()?.addXPlayerCapability(channelID: self.getID(), xCap)
                 ?? panic("Problem with PlayerReceiver Capability for player with Address: ".concat(xPlayerCap!.address.toString()))
-            oPlayerCap!.borrow()?.addOPlayerCapability(oCap)
+            oPlayerCap!.borrow()?.addOPlayerCapability(channelID: self.getID(), oCap)
                 ?? panic("Problem with PlayerReceiver Capability for player with Address: ".concat(oPlayerCap!.address.toString()))
 
             emit BoardCreated(boardID: boardID, channelID: self.getID(), xPlayerAddress: xPlayerCap!.address, oPlayerAddress: oPlayerCap!.address)
@@ -379,14 +383,22 @@ access(all) contract TicTacToe {
     // Handle
     // ------------------------------
     //
+    /// Private Capability identifying a Handle
+    ///
+    access(all) resource interface HandleID {
+        access(all) fun getID(): UInt64
+        access(all) fun getName(): String
+        access(all) fun toString(): String
+    }
+
     /// Enables one to receive XPlayer and OPlayer Capabilities
     ///
     access(all) resource interface PlayerReceiver {
         access(all) fun getID(): UInt64
         access(all) fun getName(): String
-        access(contract) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>)
-        access(contract) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>)
         access(all) fun toString(): String
+        access(contract) fun addXPlayerCapability(channelID: UInt64, _ cap: Capability<&{XPlayer}>)
+        access(contract) fun addOPlayerCapability(channelID: UInt64, _ cap: Capability<&{OPlayer}>)
     }
 
     /// Enables one to receive Channel Capabilities
@@ -394,41 +406,42 @@ access(all) contract TicTacToe {
     access(all) resource interface ChannelReceiver {
         access(all) fun getID(): UInt64
         access(all) fun getName(): String
+        access(all) fun toString(): String
+        access(all) fun getChannelAddresses(): [Address]
+        access(all) fun getBoardsInChannelWith(otherHandleAddress: Address): [UInt64]?
         access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>)
-        access(all) fun toString(): String
-    }
-
-    access(all) resource interface HandleID {
-        access(all) fun getID(): UInt64
-        access(all) fun getName(): String
-        access(all) fun toString(): String
     }
 
     /// API through which a user interfaces with the game, managing both Channel as well as the XPlayer and OPlayer
     /// Capabilities
     ///
     // TODO:
-    // - [ ] How do I know which boards are in play with a given player (IOW in a given channel)?
     // - [ ] How do I know which boards are awaiting my turn?
     access(all) resource Handle : PlayerReceiver, ChannelReceiver {
+        
+        /// Owner settable name - think of this as a gamer tag
         access(self) var name: String
-        // TODO: Consider namespacing on channeAddress.boardID
+        /// Mapping of Address to Channel ID where Address is that of the other player in the Channel
+        access(self) let channelAddressesToIDs: {Address: UInt64}
+        /// Mapping of ChannelParticipant Capabilities indexed on respective Channel IDs
+        access(self) let channelParticipantCaps: {UInt64: Capability<&{ChannelParticipant}>}
+        /// ChannelID to BoardIDs mapping
+        access(self) let channelToBoardIDs: {UInt64: [UInt64]}
+        /// Mapping of BoardIDs to XPlayer Capabilities
         access(self) let xPlayerCaps: {UInt64: Capability<&{XPlayer}>}
+        /// Mapping of BoardIDs to OPlayer Capabilities
         access(self) let oPlayerCaps: {UInt64: Capability<&{OPlayer}>}
         
-        access(self) let channelParticipantCaps: {UInt64: Capability<&{ChannelParticipant}>}
-        /// Mapping of Address to Channel.id where Address is that of the other player in the Channel
-        access(self) let channelAddressesToIDs: {Address: UInt64}
-
         init(name: String) {
             pre {
                 name.length <= 32: "Name must be less than 32 characters"
             }
             self.name = name
-            self.xPlayerCaps = {}
-            self.oPlayerCaps = {}
             self.channelParticipantCaps = {}
             self.channelAddressesToIDs = {}
+            self.channelToBoardIDs = {}
+            self.xPlayerCaps = {}
+            self.oPlayerCaps = {}
         }
 
         access(all) fun getID(): UInt64 {
@@ -439,6 +452,66 @@ access(all) contract TicTacToe {
             return self.name
         }
 
+        access(all) fun toString(): String {
+            return self.name.concat("#").concat(self.getID().toString())
+        }
+
+        access(all) fun getChannelAddresses(): [Address] {
+            return self.channelAddressesToIDs.keys
+        }
+
+        access(all) fun getBoardsInChannelWith(otherHandleAddress: Address): [UInt64]? {
+            if let channelID = self.channelAddressesToIDs[otherHandleAddress] {
+                return self.channelToBoardIDs[channelID]
+            }
+            return nil
+        }
+
+        access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
+            pre {
+                cap.check(): "Invalid Capability"
+                self.channelParticipantCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Channel"
+                cap.borrow()!.getChannelParticipantAddresses().contains(self.owner!.address):
+                    "Cannot add a ChannelParticipant Capability for a Channel this account is not a participant of"
+            }
+            let channelRef = cap.borrow()!
+            self.channelParticipantCaps.insert(key: channelRef.getID(), cap)
+            
+            let participants = channelRef.getChannelParticipantAddresses()
+            let other = participants[0] != self.owner!.address ? participants[0]! : participants[1]!
+            self.channelAddressesToIDs.insert(key: other, channelRef.getID())
+        }
+
+        access(contract) fun addXPlayerCapability(channelID: UInt64, _ cap: Capability<&{XPlayer}>) {
+            pre {
+                cap.check(): "Invalid Capability"
+                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
+                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing X for this Board"
+            }
+            if self.channelToBoardIDs[channelID] != nil {
+                self.channelToBoardIDs[channelID]!.append(cap.borrow()!.getID())
+            } else {
+                self.channelToBoardIDs.insert(key: channelID, [cap.borrow()!.getID()])
+            }
+            self.xPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
+        }
+
+        access(contract) fun addOPlayerCapability(channelID: UInt64, _ cap: Capability<&{OPlayer}>) {
+            pre {
+                cap.check(): "Invalid Capability"
+                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
+                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing O for this Board"
+            }
+            if self.channelToBoardIDs[channelID] != nil {
+                self.channelToBoardIDs[channelID]!.append(cap.borrow()!.getID())
+            } else {
+                self.channelToBoardIDs.insert(key: channelID, [cap.borrow()!.getID()])
+            }
+            self.oPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
+        }
+
+        /* --- Private --- */
+
         access(all) fun setName(_ new: String) {
             pre {
                 new.length <= 32: "Name must be less than 32 characters"
@@ -446,24 +519,6 @@ access(all) contract TicTacToe {
             let old = self.name
             self.name = new
             emit HandleNameUpdated(id: self.getID(), oldName: old, newName: new)
-        }
-
-        access(contract) fun addXPlayerCapability(_ cap: Capability<&{XPlayer}>) {
-            pre {
-                cap.check(): "Invalid Capability"
-                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
-                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing X for this Board"
-            }
-            self.xPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
-        }
-
-        access(contract) fun addOPlayerCapability(_ cap: Capability<&{OPlayer}>) {
-            pre {
-                cap.check(): "Invalid Capability"
-                self.oPlayerCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Board"
-                self.xPlayerCaps[cap.borrow()!.getID()] == nil: "Already playing O for this Board"
-            }
-            self.oPlayerCaps.insert(key: cap.borrow()!.getID(), cap)
         }
 
         access(all) fun borrowXPlayer(id: UInt64): &{XPlayer}? {
@@ -482,19 +537,8 @@ access(all) contract TicTacToe {
             return self.oPlayerCaps.remove(key: id) != nil
         }
 
-        access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>) {
-            pre {
-                cap.check(): "Invalid Capability"
-                self.channelParticipantCaps[cap.borrow()!.getID()] == nil: "Already have Capability for this Channel"
-                cap.borrow()!.getChannelParticipantAddresses().contains(self.owner!.address):
-                    "Cannot add a ChannelParticipant Capability for a Channel this account is not a participant of"
-            }
-            let channelRef = cap.borrow()!
-            self.channelParticipantCaps.insert(key: channelRef.getID(), cap)
-            
-            let participants = channelRef.getChannelParticipantAddresses()
-            let other = participants[0] != self.owner!.address ? participants[0]! : participants[1]!
-            self.channelAddressesToIDs.insert(key: other, channelRef.getID())
+        access(all) fun getChannelParticipantCaps(): {UInt64: Capability<&{ChannelParticipant}>} {
+            return self.channelParticipantCaps
         }
 
         access(all) fun borrowChannelParticpantByAddress(_ address: Address): &{ChannelParticipant}? {
@@ -515,14 +559,6 @@ access(all) contract TicTacToe {
                 emit PlayerLeftChannel(channelID: id, playerID: self.getID(), playerAddress: self.owner!.address)
             }
             return true
-        }
-
-        access(all) fun getChannelAddresses(): [Address] {
-            return self.channelAddressesToIDs.keys
-        }
-
-        access(all) fun toString(): String {
-            return self.name.concat("#").concat(self.getID().toString())
         }
     }
 

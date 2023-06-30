@@ -52,7 +52,7 @@ Each player's access to the game is mediated through a `Handle` which manages Ca
     ```
 1. Transfer $FLOW to `player1` so it can fund the channel
     ```sh
-    flow transactions send transactions/transfer_flow.cdc e03daebed8ca0615 10.0
+    flow transactions send transactions/transfer_flow.cdc <PLAYER_ONE_ADDRESS> 10.0
     ```
 1. Setup a channel between `player1` and `player2` which also creates a new board in said `Channel` account
     ```sh
