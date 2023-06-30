@@ -7,8 +7,8 @@ import "TicTacToe"
 transaction(withPlayer: Address, fundingAmount: UFix64) {
     prepare(signer: AuthAccount) {
         // Get PlayerReceiver Capabilities
-        let playerReceiver1Cap = signer.getCapability<&{TicTacToe.PlayerReceiver}>(TicTacToe.PlayerReceiverPublicPath)
-        let playerReceiver2Cap = getAccount(withPlayer).getCapability<&{TicTacToe.PlayerReceiver}>(TicTacToe.PlayerReceiverPublicPath)
+        let playerReceiver1Cap = signer.getCapability<&{TicTacToe.PlayerReceiver}>(TicTacToe.HandlePublicPath)
+        let playerReceiver2Cap = getAccount(withPlayer).getCapability<&{TicTacToe.PlayerReceiver}>(TicTacToe.HandlePublicPath)
 
         assert(playerReceiver1Cap.check(), message: "Problem with signer's PlayerReceiver Capability")
         assert(playerReceiver2Cap.check(), message: "Problem with target Address PlayerReceiver Capability")
@@ -16,7 +16,7 @@ transaction(withPlayer: Address, fundingAmount: UFix64) {
         // Get reference to ChannelReceiver
         let channelReceiver1Ref = signer.borrow<&{TicTacToe.ChannelReceiver}>(from: TicTacToe.HandleStoragePath)
             ?? panic("Signer doesn't have Handle configured in Storage")
-        let channelReceiver2Ref = getAccount(withPlayer).getCapability<&{TicTacToe.ChannelReceiver}>(TicTacToe.ChannelReceiverPublicPath)
+        let channelReceiver2Ref = getAccount(withPlayer).getCapability<&{TicTacToe.ChannelReceiver}>(TicTacToe.HandlePublicPath)
             .borrow()
             ?? panic("Problem retrieving ChannelReceiver from target account")
         
