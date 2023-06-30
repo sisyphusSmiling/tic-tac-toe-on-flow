@@ -53,26 +53,46 @@ access(all) contract TicTacToe {
 
     /* Events */
     //
+    /// Contract minimum funding amount for new Channels was updated
     access(all) event MinimumFundingAmountUpdated(newAmount: UFix64)
-    access(all) event ChannelCreated(id: UInt64, address: Address, players: [Address])
-    access(all) event ChannelFunded(id: UInt64, address: Address, amount: UFix64)
-    access(all) event PlayerLeftChannel(channelID: UInt64, playerID: UInt64, playerAddress: Address)
+    /// Handle with id and name was created
     access(all) event HandleCreated(id: UInt64, name: String)
+    /// Handle name has been updated
     access(all) event HandleNameUpdated(id: UInt64, oldName: String, newName: String)
-    access(all) event BoardAddedToChannel(boardID: UInt64, channelID: UInt64, xPlayerAddress: Address, oPlayerAddress: Address)
+    /// New Channel was created between the two players and lives at emitted Address
+    access(all) event ChannelCreated(id: UInt64, address: Address, players: [Address])
+    /// Channel with id at emitted Address was funded by one of the participants
+    access(all) event ChannelFunded(id: UInt64, address: Address, amount: UFix64)
+    /// Channel Participant left the channel
+    access(all) event PlayerLeftChannel(channelID: UInt64, playerID: UInt64, playerAddress: Address)
+    /// Board created and added to channel - xPlayerAddress always goes first
+    access(all) event BoardCreated(boardID: UInt64, channelID: UInt64, xPlayerAddress: Address, oPlayerAddress: Address)
+    /// Move submitted - move: true == X | move: false == O | boardState[y][x] == nil: empty
     access(all) event MoveSubmitted(move: Bool, boardID: UInt64, boardState: [[Bool?]])
+    /// Board completed - winner == nil: draw | winner == true: X wins | winner == false: O wins
     access(all) event GameOver(winner: Bool?, boardID: UInt64)
-    // Two-stage deletion - pending: deletion awaiting approval | !pending: deletion complete
+    /// Two-stage deletion - pending: deletion awaiting approval | !pending: deletion complete
     access(all) event BoardDeletion(boardID: UInt64, channelID: UInt64, pending: Bool)
 
     // ------------------------------
     // Board & Players 
     // ------------------------------
     //
+    access(all) resource interface BoardSpectator {
+        access(all) fun getID(): UInt64
+        access(all) fun getNextMove(): Bool?
+        access(all) fun isInPlay(): Bool
+        access(all) fun getBoard(): [[Bool?]]
+        access(all) fun getWinner(): Bool?
+    }
     /// Interface representing player submitting X
     ///
     access(all) resource interface XPlayer {
         access(all) fun getID(): UInt64
+        access(all) fun getNextMove(): Bool?
+        access(all) fun isInPlay(): Bool
+        access(all) fun getBoard(): [[Bool?]]
+        access(all) fun getWinner(): Bool?
         access(all) fun markX(row: Int, column: Int)
     }
 
@@ -80,10 +100,16 @@ access(all) contract TicTacToe {
     ///
     access(all) resource interface OPlayer {
         access(all) fun getID(): UInt64
+        access(all) fun getNextMove(): Bool?
+        access(all) fun isInPlay(): Bool
+        access(all) fun getBoard(): [[Bool?]]
+        access(all) fun getWinner(): Bool?
         access(all) fun markO(row: Int, column: Int)
     }
     
-    /// Resource representing board state and acted on by both players
+    /// Resource representing board state and acted on by both players. Coordination on the board is mediated by a
+    /// shared Channel
+    ///
     access(all) resource Board : XPlayer, OPlayer {
         // X: true | O: false | empty: nil
         access(all) let id: UInt64
@@ -110,6 +136,30 @@ access(all) contract TicTacToe {
         ///
         access(all) fun getID(): UInt64 {
             return self.id
+        }
+
+        /// Getter to check if board is in play
+        ///
+        access(all) fun isInPlay(): Bool {
+            return self.inPlay
+        }
+
+        /// Getter for winner - true == X | false == O | nil otherwise
+        ///
+        access(all) fun getWinner(): Bool? {
+            return self.winner
+        }
+
+        /// Getter for board state
+        ///
+        access(all) fun getBoard(): [[Bool?]] {
+            return self.board
+        }
+
+        /// Getter for next move
+        ///
+        access(all) fun getNextMove(): Bool? {
+            return self.nextMove
         }
 
         /// Marks true (AKA X) at the specified cell
@@ -149,30 +199,6 @@ access(all) contract TicTacToe {
             if !self.inPlay {
                 emit GameOver(winner: self.getWinner(), boardID: self.getID())
             }
-        }
-
-        /// Getter to check if board is in play
-        ///
-        access(all) fun isInPlay(): Bool {
-            return self.inPlay
-        }
-
-        /// Getter for winner - true == X | false == O | nil otherwise
-        ///
-        access(all) fun getWinner(): Bool? {
-            return self.winner
-        }
-
-        /// Getter for board state
-        ///
-        access(all) fun getBoard(): [[Bool?]] {
-            return self.board
-        }
-
-        /// Getter for next move
-        ///
-        access(all) fun getNextMove(): Bool? {
-            return self.nextMove
         }
     }
 
@@ -264,10 +290,12 @@ access(all) contract TicTacToe {
             self.storedBoards.append(boardID)
 
             let boardStoragePath = StoragePath(identifier: TicTacToe.boardPathPrefix.concat(boardID.toString()))!
+            let boardPublicPath = PublicPath(identifier: TicTacToe.boardPathPrefix.concat(boardID.toString()))!
             let xPrivatePath = PrivatePath(identifier: TicTacToe.xPlayerPathPrefix.concat(boardID.toString()))!
             let oPrivatePath = PrivatePath(identifier: TicTacToe.oPlayerPathPrefix.concat(boardID.toString()))!
 
             account.save(<-board, to: boardStoragePath)
+            account.link<&{BoardSpectator}>(boardPublicPath, target: boardStoragePath)
             account.link<&{XPlayer}>(xPrivatePath, target: boardStoragePath)
             account.link<&{OPlayer}>(oPrivatePath, target: boardStoragePath)
 
@@ -286,7 +314,7 @@ access(all) contract TicTacToe {
             oPlayerCap!.borrow()?.addOPlayerCapability(oCap)
                 ?? panic("Problem with PlayerReceiver Capability for player with Address: ".concat(oPlayerCap!.address.toString()))
 
-            emit BoardAddedToChannel(boardID: boardID, channelID: self.getID(), xPlayerAddress: xPlayerCap!.address, oPlayerAddress: oPlayerCap!.address)
+            emit BoardCreated(boardID: boardID, channelID: self.getID(), xPlayerAddress: xPlayerCap!.address, oPlayerAddress: oPlayerCap!.address)
         }
 
         /// Two-stage deletion process where the first participant can initiate a deletion and the second participant
@@ -308,9 +336,11 @@ access(all) contract TicTacToe {
                 let account = self.accountCap.borrow() ?? panic("Problem with AuthAccount Capability")
 
                 let boardStoragePath = StoragePath(identifier: TicTacToe.boardPathPrefix.concat(boardID.toString()))!
+                let boardPublicPath = PublicPath(identifier: TicTacToe.boardPathPrefix.concat(boardID.toString()))!
                 let xPrivatePath = PrivatePath(identifier: TicTacToe.xPlayerPathPrefix.concat(boardID.toString()))!
                 let oPrivatePath = PrivatePath(identifier: TicTacToe.oPlayerPathPrefix.concat(boardID.toString()))!
                 
+                account.unlink(boardPublicPath)
                 account.unlink(xPrivatePath)
                 account.unlink(oPrivatePath)
 

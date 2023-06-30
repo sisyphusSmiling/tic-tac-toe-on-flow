@@ -45,10 +45,10 @@ Each player's access to the game is mediated through a `Handle` which manages Ca
     ```
 1.  Configure `Handle` resources in player accounts
     ```sh
-    flow transactions send transactions/setup_handle.cdc --signer player1
+    flow transactions send transactions/setup_handle.cdc <HANDLE_NAME> --signer player1
     ```
     ```sh
-    flow transactions send transactions/setup_handle.cdc --signer player2
+    flow transactions send transactions/setup_handle.cdc <HANDLE_NAME> --signer player2
     ```
 1. Transfer $FLOW to `player1` so it can fund the channel
     ```sh
