@@ -21,7 +21,7 @@ import "FlowToken"
 /// immortal public good.
 ///
 /* TODO:
-    - [ ] Enable board id to channel attribution - need to know which board is for which channel
+    - [X] Enable board id to channel attribution - need to know which board is for which channel
     - [ ] Problem: Given a Handle, how do I know which boards are currently inPlay and which are currently waiting for my turn?
           This can also be solved by a script if necessary
         - [ ] Look up currently inPlay boards from Handle
@@ -416,6 +416,8 @@ access(all) contract TicTacToe {
         access(all) fun toString(): String
         access(all) fun getChannelIDs(): [UInt64]
         access(all) fun getChannelAddresses(): [Address]
+        access(all) fun getAddressesToIDs(): {Address: UInt64}
+        access(all) fun getChannelToBoardIDs(): {UInt64: [UInt64]}
         access(all) fun getBoardsInChannelWith(otherHandleAddress: Address): [UInt64]?
         access(contract) fun addChannelParticipantCapability(_ cap: Capability<&{ChannelParticipant}>)
     }
@@ -423,8 +425,6 @@ access(all) contract TicTacToe {
     /// API through which a user interfaces with the game, managing both Channel as well as the XPlayer and OPlayer
     /// Capabilities
     ///
-    // TODO:
-    // - [ ] How do I know which boards are awaiting my turn?
     access(all) resource Handle : PlayerReceiver, ChannelReceiver {
         
         /// Owner settable name - think of this as a gamer tag
@@ -470,6 +470,14 @@ access(all) contract TicTacToe {
 
         access(all) fun getChannelAddresses(): [Address] {
             return self.channelAddressesToIDs.keys
+        }
+
+        access(all) fun getAddressesToIDs(): {Address: UInt64} {
+            return self.channelAddressesToIDs
+        }
+
+        access(all) fun getChannelToBoardIDs(): {UInt64: [UInt64]} {
+            return self.channelToBoardIDs
         }
 
         access(all) fun getBoardsInChannelWith(otherHandleAddress: Address): [UInt64]? {
@@ -523,7 +531,7 @@ access(all) contract TicTacToe {
         }
 
         /* --- Private --- */
-
+        //
         access(all) fun setName(_ new: String) {
             pre {
                 new.length <= 32: "Name must be less than 32 characters"
@@ -562,8 +570,17 @@ access(all) contract TicTacToe {
             return nil
         }
 
+        access(all) fun getXPlayerCaps(): {UInt64: Capability<&{XPlayer}>} {
+            return self.xPlayerCaps
+        }
+
+        access(all) fun getOPlayerCaps(): {UInt64: Capability<&{OPlayer}>} {
+            return self.oPlayerCaps
+        }
+
         /// Removes Channel related data & Capabilities from this Handle and removes the PlayerReceiver Capability from
         /// the specified Channel
+        ///
         access(all) fun leaveChannel(withAddress: Address): Bool {
             if let id = self.channelAddressesToIDs.remove(key: withAddress) {
                 let channelRef = self.channelParticipantCaps.remove(key: id)!.borrow()!
