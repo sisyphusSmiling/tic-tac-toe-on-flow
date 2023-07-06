@@ -26,12 +26,12 @@
 			"key": "2b53f8bcb31878ac8a3886eceba93275498461a9ce35101bf6e545e01b9af309"
 		},
 		"player1": {
-			"address": "01cf0e2f2f715450",
-			"key": "3406feeed3f7b511165f489da8889a58f7a0f63ed5aaec482a6f8792176468a3"
+			"address": "e03daebed8ca0615",
+			"key": "487f8dca35785c4e464dc2231f82d483258565c50bfac411a4f181bd05c9da65"
 		},
 		"player2": {
-			"address": "179b6b1cb6755e31",
-			"key": "6c2a6bc1771282dfcd5d981c85fd88dd1bfa4a782d74f9686eb377c8790f163c"
+			"address": "045a1763c93006ca",
+			"key": "62562ff408346364c6549b557aa19e0891a9d50cd070df39e25a63fe77b9429f"
 		}
 	},
 	"deployments": {

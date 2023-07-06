@@ -51,7 +51,7 @@ Each player's access to the game is mediated through a `Handle` which manages Ca
     ```
 1. Either player can now setup a new `Board` to play in the channel account. Even though `player1` setup the channel, `player2` can start up a new board between them:
     ```sh
-    flow transactions send transactions/start_new_board_with_player.cdc 01cf0e2f2f715450 --signer player2
+    flow transactions send transactions/start_new_board_with_player.cdc e03daebed8ca0615 --signer player2
     ```
 1. Remember - X always goes first and assignment is randomized to channel participants on `Board` creation. Players submit moves and continue gameplay (repeat until game is over)
     > Check the `TicTacToe.BoardCreated` event for the `boardID` and `xPlayerAddress` for the first player assignment
