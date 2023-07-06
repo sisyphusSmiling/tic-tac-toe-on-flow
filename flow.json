@@ -25,22 +25,19 @@
 			"address": "f8d6e0586b0a20c7",
 			"key": "2b53f8bcb31878ac8a3886eceba93275498461a9ce35101bf6e545e01b9af309"
 		},
-		"flow-token": {
-			"address": "0ae53cb6e3f42a79",
-			"key": "2b53f8bcb31878ac8a3886eceba93275498461a9ce35101bf6e545e01b9af001"
+		"player1": {
+			"address": "01cf0e2f2f715450",
+			"key": "3406feeed3f7b511165f489da8889a58f7a0f63ed5aaec482a6f8792176468a3"
 		},
-		"standards": {
-			"address": "ee82856bf20e2aa6",
-			"key": "2b53f8bcb31878ac8a3886eceba93275498461a9ce35101bf6e545e01b9af000"
+		"player2": {
+			"address": "179b6b1cb6755e31",
+			"key": "6c2a6bc1771282dfcd5d981c85fd88dd1bfa4a782d74f9686eb377c8790f163c"
 		}
 	},
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
 				"TicTacToe"
-			],
-			"standards": [
-				"FungibleToken"
 			]
 		}
 	}
