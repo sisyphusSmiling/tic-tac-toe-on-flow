@@ -47,7 +47,7 @@ Each player's access to the game is mediated through a `Handle` which manages Ca
 1. Setup a "channel account" between `player1` and `player2`. Since the channel account needs to be created, we'll also specify an amount of $FLOW to fund the new account. Think of this like the quarter you put into an arcade machine to play a game, except here it funds account storage so we can save `Board`s in the `Channel` account.
     > As mentioned above, a "channel account" can be thought of as a Web3-native game server - a neutral ground that codifies rules of engagement enabling collaborative play in an the inherently adversarial environment of player vs. player games.
     ```sh
-    flow transactions send transactions/create_channel_with_player.cdc 179b6b1cb6755e31 1.0 --signer player1
+    flow transactions send transactions/create_channel_with_player.cdc 045a1763c93006ca 1.0 --signer player1
     ```
 1. Either player can now setup a new `Board` to play in the channel account. Even though `player1` setup the channel, `player2` can start up a new board between them:
     ```sh
