@@ -374,7 +374,8 @@ access(all) contract TicTacToe {
             )
         }
 
-        /// Enables a player to leave the channel, replacing their PlayerReceiver Capability with nil
+        /// Enables a player to leave the channel, replacing their PlayerReceiver Capability with nil.
+        /// Pattern inspired by those found in the HybridCustody contract.
         ///
         access(contract) fun removePlayerCallback(_ id: UInt64) {
             pre {
